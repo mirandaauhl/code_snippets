@@ -65,3 +65,36 @@ SELECT *
 FROM windows
 WHERE time <= '2021-11-29 12:00:00'
 ;
+
+
+
+--PART 2
+WITH aggs AS (SELECT time_bucket('1 min', time) as bucket ,
+	symbol, 
+	stats_agg(volume, price) AS minutely_stats	-- price = x volume = y
+FROM trades 
+WHERE time >= '2021-11-29 09:00:00' AND time <= '2021-11-29 12:30:00'
+GROUP BY 1, 2) , 
+windows AS (SELECT
+	bucket, symbol,
+	rolling(minutely_stats) OVER rolling_30_min AS tumbling_stats
+FROM aggs
+WINDOW 
+	rolling_30_min AS (PARTITION BY symbol ORDER BY bucket ASC RANGE BETWEEN '15 min' PRECEDING AND '15 min' FOLLOWING))
+SELECT bucket, symbol, 
+average_x(tumbling_stats ) AS price_tumbling_average, 
+average_y(tumbling_stats) AS volume_tumbling_average,
+corr(tumbling_stats) as pv_tumbling_correlation 
+FROM windows;
+
+WITH windows AS (SELECT *, 
+	max(time) OVER rolling_30_min AS max_time, 
+	min(time) OVER rolling_30_min as min_time,
+	average(stats_agg(volume) OVER rolling_30_min ) AS avg_volume_ts_rolling_30,
+	avg(volume) OVER rolling_30_min AS avg_volume_pg_rolling_30
+	
+FROM trades 
+WHERE time >= '2021-11-29 09:00:00' AND time <= '2021-11-29 12:30:00'
+WINDOW 
+	rolling_30_min AS (PARTITION BY symbol ORDER BY time ASC RANGE BETWEEN '15 min' PRECEDING AND '15 min' FOLLOWING))
+SELECT * FROM windows;
